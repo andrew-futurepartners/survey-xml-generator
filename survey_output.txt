@@ -1,0 +1,85 @@
+<html label="CommentIntro" where="survey">Thank you for your help with this survey, which should take approximately 10 minutes to complete. Please begin by answering the questions below, then click on the button below to continue.</html>
+
+<select label="qDropDown">
+  <title>Question drop down?</title>
+  <comment>Select one.</comment>
+  <choice label="ch1">17 or younger</choice>
+  <choice label="ch2">18</choice>
+  <choice label="ch3">19</choice>
+  <choice label="ch4">20</choice>
+  <choice label="ch5">21</choice>
+  <choice label="ch6">22</choice>
+  <choice label="ch7">23</choice>
+  <choice label="ch8">24</choice>
+  <choice label="ch9">25</choice>
+  <choice label="ch10">26</choice>
+  <choice label="ch11">27</choice>
+  <choice label="ch12">28</choice>
+  <choice label="ch13">29</choice>
+  <choice label="ch14">30 or older</choice>
+</select>
+
+<radio label="qSingleSelect">
+  <title>Question single select?</title>
+  <comment>Select one.</comment>
+  <row label="r1">Answer 1</row>
+  <row label="r2">Answer 2</row>
+  <row label="r3">Answer 3</row>
+  <row label="r4">Answer 4</row>
+  <row label="r5">Answer 5</row>
+</radio>
+
+<checkbox label="qSingleSelect2" atleast="1" shuffle="rows">
+  <title>Question single select 2?</title>
+  <comment><span>Select one.</span></comment>
+  <row label="r1">Answer 1</row>
+  <row label="r2">Answer 2</row>
+  <row label="r3" randomize="0">Answer 3</row>
+</checkbox>
+
+<suspend/>
+
+<checkbox label="qMultiSelect" atleast="1" shuffle="rows">
+  <title>Question multi-select?</title>
+  <comment><span>Select all that apply.</span></comment>
+  <row label="r1">Answer 1</row>
+  <row label="r2">Answer 2</row>
+  <row label="r3">Answer 3</row>
+  <row label="r4">Answer 4</row>
+  <row label="r5" exclusive="1" randomize="0">Answer 5</row>
+</checkbox>
+
+<checkbox label="qMultiSelect2" atleast="1" shuffle="rows" atmost="2">
+  <title>Question multi-select 2?</title>
+  <comment><span>Select up to two (2).</span></comment>
+  <row label="r1">Answer 1</row>
+  <row label="r2">Answer 2</row>
+  <row label="r3" randomize="0">Answer 3</row>
+</checkbox>
+
+<suspend/>
+
+<radio label="qMatrix" shuffle="rows">
+  <title>Question matrix?</title>
+  <comment>Select one.</comment>
+  <col label="c1">1 Scale</col>
+  <col label="c2">2</col>
+  <col label="c3">3</col>
+  <col label="c4">4</col>
+  <col label="c5">5 Scale</col>
+  <row label="r1">Answer 1</row>
+  <row label="r2">Answer 2</row>
+  <row label="r3">Answer 3</row>
+  <row label="r4">Answer 4</row>
+  <row label="r5" randomize="0">Answer 5</row>
+</radio>
+
+<text label="qOpenEnd" optional="0" size="25">
+  <title>Question open end?</title>
+  <comment>Fill out below.</comment>
+</text>
+
+<number label="qNumeric" optional="0" size="10">
+  <title>Question open end?</title>
+  <comment>Enter a number.</comment>
+</number>
