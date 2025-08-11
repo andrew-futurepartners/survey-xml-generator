@@ -75,6 +75,15 @@ COUNTRIES = [
     "Virgin Islands", "West Bank", "Western Sahara", "Yemen", "Zambia", "Zimbabwe"
 ]
 
+VERIFY_MAP = {
+    "uszipcode": "zipcode",
+    "us zip code": "zipcode",
+    "zipcode": "zipcode",
+    "email": "email",
+    "number": "number",
+    "digits": "digits"
+}
+
 def finalize_question(label, title, instruction, answers, modifiers):
     if not label or not title:
         return None
@@ -147,7 +156,10 @@ def finalize_question(label, title, instruction, answers, modifiers):
             for mod in modifiers:
                 match = re.match(r'\[VERIFY:\s*(.+?)\s*\]', mod, re.IGNORECASE)
                 if match:
-                    verify_type = match.group(1).strip().lower().replace(" ", "")
+                    raw_verify = match.group(1).strip().lower().replace(" ", "")
+                    verify_type = VERIFY_MAP.get(raw_verify, raw_verify)
+                    break  # use the first verify match only
+
             verify_attr = f' verify="{verify_type}"' if verify_type else ""
             xml_lines = [
                 f'<text label="{label}" optional="0" size="10"{verify_attr}>',
@@ -179,8 +191,12 @@ def finalize_question(label, title, instruction, answers, modifiers):
             for mod in modifiers:
                 match = re.match(r'\[VERIFY:\s*(.+?)\s*\]', mod, re.IGNORECASE)
                 if match:
-                    verify_type = match.group(1).strip().lower().replace(" ", "")
+                    raw_verify = match.group(1).strip().lower().replace(" ", "")
+                    verify_type = VERIFY_MAP.get(raw_verify, raw_verify)
+                    break  # use the first verify match only
+
             verify_attr = f' verify="{verify_type}"' if verify_type else ""
+
             xml_lines = [
                 f'<text label="{label}" optional="0" size="25"{verify_attr}>',
                 f'  <title>{title}</title>',
