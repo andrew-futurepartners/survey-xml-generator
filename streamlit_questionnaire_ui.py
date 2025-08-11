@@ -158,12 +158,22 @@ def finalize_question(label, title, instruction, answers, modifiers):
             return "\n".join(xml_lines)
 
         if "number" in instruction.lower():
+            verify_type = None
+            for mod in modifiers:
+                range_match = re.match(r'\[RANGE:\s*(\d+)\s*[-–]\s*(\d+)\s*\]', mod, re.IGNORECASE)
+                if range_match:
+                    min_val, max_val = range_match.groups()
+                    verify_type = f'range({min_val},{max_val})'
+                    break
+
+            verify_attr = f' verify="{verify_type}"' if verify_type else ""
             xml_lines = [
-                f'<number label="{label}" optional="0" size="10">',
+                f'<number label="{label}" optional="0" size="10"{verify_attr}>',
                 f'  <title>{title}</title>',
                 f'  <comment>{instruction}</comment>',
                 f'</number>'
             ]
+            return "\n".join(xml_lines)
         else:
             verify_type = None
             for mod in modifiers:
