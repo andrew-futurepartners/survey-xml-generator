@@ -117,19 +117,19 @@ def finalize_question(label, title, instruction, answers, modifiers):
         # Enhanced flexible range matching
         range_match = re.search(r'[\[<]([^\[\]<>–—\-]*?)(\d+)\s*[\u2013\u2014\-]\s*(\d+)([^\[\]<>–—\-]*?)[\]>]', drop_down_row)
         if range_match:
-            prefix = range_match.group(1).strip()
+            before = range_match.group(1).strip()
             start = int(range_match.group(2))
             end = int(range_match.group(3))
-            suffix = range_match.group(4).strip()
+            after = range_match.group(4).strip()
 
             step = 1 if start < end else -1
             choices = []
             for i in range(start, end + step, step):
                 label_text = str(i)
-                if i == start and prefix:
-                    label_text = f"{prefix} {label_text}".strip()
-                if i == end and suffix:
-                    label_text = f"{label_text} {suffix}".strip()
+                if i == start and before:
+                    label_text = f"{before} {label_text}".strip()
+                if i == end and after:
+                    label_text = f"{label_text} {after}".strip()
                 choices.append(label_text)
         else:
             choices = ["PASTE CHOICE OPTIONS"]
