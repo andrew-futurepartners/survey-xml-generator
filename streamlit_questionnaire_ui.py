@@ -10,7 +10,7 @@ from io import BytesIO
 st.set_page_config(page_title="Survey XML Generator", layout="wide")
 st.title("📄 Survey Questionnaire to XML")
 
-# === CODE BLOCK: Utility Functions (from local script) ===
+# === CODE BLOCK: Utility Functions ===
 def iter_block_items(parent):
     for child in parent.element.body.iterchildren():
         if isinstance(child, CT_P):
@@ -37,9 +37,67 @@ def clean_label_and_title(text):
     match = re.match(r'^\[(.+?)\]\s*(.*)', text.strip())
     return (match.group(1), match.group(2)) if match else (None, text.strip())
 
+US_STATES = [
+    "Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado", "Connecticut", "Delaware",
+    "Florida", "Georgia", "Hawaii", "Idaho", "Illinois", "Indiana", "Iowa", "Kansas", "Kentucky", "Louisiana",
+    "Maine", "Maryland", "Massachusetts", "Michigan", "Minnesota", "Mississippi", "Missouri", "Montana",
+    "Nebraska", "Nevada", "New Hampshire", "New Jersey", "New Mexico", "New York", "North Carolina",
+    "North Dakota", "Ohio", "Oklahoma", "Oregon", "Pennsylvania", "Rhode Island", "South Carolina",
+    "South Dakota", "Tennessee", "Texas", "Utah", "Vermont", "Virginia", "Washington", "West Virginia",
+    "Wisconsin", "Wyoming", "District of Columbia"
+]
+
+COUNTRIES = [
+    "Afghanistan", "Albania", "Algeria", "American Samoa", "Andorra", "Angola", "Anguilla", "Antarctica",
+    "Antigua and Barbuda", "Argentina", "Armenia", "Aruba", "Australia", "Austria", "Azerbaijan", "The Bahamas",
+    "Bahrain", "Bangladesh", "Barbados", "Belarus", "Belgium", "Belize", "Bermuda", "Bolivia",
+    "Bosnia and Herzegovina", "Botswana", "Brazil", "British Indian Ocean Territory", "British Virgin Islands",
+    "Brunei", "Bulgaria", "Burkina Faso", "Burma", "Cambodia", "Cameroon", "Canada", "Cape Verde",
+    "Cayman Islands", "Central African Republic", "Chad", "Chile", "China", "Colombia",
+    "Democratic Republic of the Congo", "Republic of the Congo", "Cook Islands", "Costa Rica", "Cote d'Ivoire",
+    "Croatia", "Cuba", "Cyprus", "Czech Republic", "Denmark", "Dominica", "Dominican Republic", "Ecuador",
+    "Egypt", "El Salvador", "Eritrea", "Estonia", "Ethiopia", "Fiji", "Finland", "France", "French Guiana",
+    "French Polynesia", "French Southern and Antarctic Lands", "The Gambia", "Gaza Strip", "Georgia", "Germany",
+    "Ghana", "Gibraltar", "Greece", "Greenland", "Guam", "Guatemala", "Guinea", "Guinea-Bissau", "Guyana",
+    "Haiti", "Honduras", "Hong Kong", "Hungary", "Iceland", "India", "Indonesia", "Iran", "Iraq", "Ireland",
+    "Israel", "Italy", "Jamaica", "Japan", "Jersey", "Jordan", "Kazakhstan", "Kenya", "North Korea",
+    "South Korea", "Kuwait", "Kyrgyzstan", "Laos", "Latvia", "Lebanon", "Liberia", "Libya", "Liechtenstein",
+    "Lithuania", "Luxembourg", "Macau", "Macedonia", "Madagascar", "Malaysia", "Maldives", "Mali", "Malta",
+    "Mexico", "Moldova", "Monaco", "Mongolia", "Montserrat", "Morocco", "Mozambique", "Namibia", "Nepal",
+    "Netherlands", "Netherlands Antilles", "New Zealand", "Nicaragua", "Niger", "Nigeria", "Norway", "Oman",
+    "Pakistan", "Palau", "Panama", "Papua New Guinea", "Paraguay", "Peru", "Philippines", "Poland",
+    "Portugal", "Puerto Rico", "Qatar", "Romania", "Russia", "Rwanda", "Samoa", "Saint Lucia",
+    "Saint Vincent and the Grenadines", "Saudi Arabia", "Senegal", "Serbia and Montenegro", "Sierra Leone",
+    "Singapore", "Slovakia", "Slovenia", "Somalia", "South Africa", "Spain", "Sri Lanka", "Sudan", "Suriname",
+    "Swaziland", "Sweden", "Switzerland", "Syria", "Taiwan", "Tajikistan", "Tanzania", "Thailand", "Tonga",
+    "Trinidad and Tobago", "Tunisia", "Turkey", "Turkmenistan", "Uganda", "Ukraine", "United Arab Emirates",
+    "United Kingdom", "United States", "Uruguay", "Uzbekistan", "Vatican City", "Venezuela", "Vietnam",
+    "Virgin Islands", "West Bank", "Western Sahara", "Yemen", "Zambia", "Zimbabwe"
+]
+
 def finalize_question(label, title, instruction, answers, modifiers):
     if not label or not title:
         return None
+
+    if label.lower() == "qstate":
+        answers = US_STATES
+        xml_lines = [f'<select label="{label}">']
+        xml_lines.append(f'  <title>{title}</title>')
+        xml_lines.append(f'  <comment>{instruction}</comment>')
+        for idx, choice in enumerate(answers, 1):
+            xml_lines.append(f'  <choice label="ch{idx}">{choice}</choice>')
+        xml_lines.append('</select>')
+        return "\n".join(xml_lines)
+
+    elif label.lower() == "qcountry":
+        answers = COUNTRIES
+        xml_lines = [f'<select label="{label}">']
+        xml_lines.append(f'  <title>{title}</title>')
+        xml_lines.append(f'  <comment>{instruction}</comment>')
+        for idx, choice in enumerate(answers, 1):
+            xml_lines.append(f'  <choice label="ch{idx}">{choice}</choice>')
+        xml_lines.append('</select>')
+        return "\n".join(xml_lines)
 
     filtered_answers = []
     for a in answers:
@@ -77,6 +135,22 @@ def finalize_question(label, title, instruction, answers, modifiers):
         return "\n".join(xml_lines)
 
     if not filtered_answers:
+        # --- force qZipCode to always be a text input ---
+        if label.lower() == "qzipcode":
+            verify_type = None
+            for mod in modifiers:
+                match = re.match(r'\[VERIFY:\s*(.+?)\s*\]', mod, re.IGNORECASE)
+                if match:
+                    verify_type = match.group(1).strip().lower().replace(" ", "")
+            verify_attr = f' verify="{verify_type}"' if verify_type else ""
+            xml_lines = [
+                f'<text label="{label}" optional="0" size="10"{verify_attr}>',
+                f'  <title>{title}</title>',
+                f'  <comment>{instruction}</comment>',
+                f'</text>'
+            ]
+            return "\n".join(xml_lines)
+
         if "number" in instruction.lower():
             xml_lines = [
                 f'<number label="{label}" optional="0" size="10">',
@@ -85,8 +159,14 @@ def finalize_question(label, title, instruction, answers, modifiers):
                 f'</number>'
             ]
         else:
+            verify_type = None
+            for mod in modifiers:
+                match = re.match(r'\[VERIFY:\s*(.+?)\s*\]', mod, re.IGNORECASE)
+                if match:
+                    verify_type = match.group(1).strip().lower().replace(" ", "")
+            verify_attr = f' verify="{verify_type}"' if verify_type else ""
             xml_lines = [
-                f'<text label="{label}" optional="0" size="25">',
+                f'<text label="{label}" optional="0" size="25"{verify_attr}>',
                 f'  <title>{title}</title>',
                 f'  <comment>{instruction}</comment>',
                 f'</text>'
@@ -157,6 +237,12 @@ if uploaded_file:
                 xml_blocks.append(f'<html label="{lbl}" where="survey">{content}</html>')
                 continue
 
+            if text.startswith("["):
+                lbl, content = clean_label_and_title(text)
+                if lbl and lbl.lower().startswith("term"):
+                    xml_blocks.append(f'<term label="{lbl}" cond="1">{content}</term>')
+                    continue
+
             if re.fullmatch(r'<<PAGE BREAK>>', text):
                 if label:
                     finalized = finalize_question(label, title, instruction, current_answers, modifiers)
@@ -192,10 +278,22 @@ if uploaded_file:
                 continue
 
             if mode == "collect" and text:
-                if re.fullmatch(r'\[[^\]]+\]', text.strip()) and text.strip()[1:-1].isupper():
-                    modifiers.append(text.strip())
+                if ">programming note:" in text.lower():
+                    continue  # Skip any line containing a programming note
+                stripped = text.strip()
+                if re.fullmatch(r'\[[^\]]+\]', stripped):
+                    if stripped[1:-1].lower().startswith("verify:"):
+                        modifiers.append(stripped)
+                    elif stripped[1:-1].isupper():
+                        modifiers.append(stripped)
+                    else:
+                        current_answers.append(text)
+                elif stripped.lower().startswith("<drop down"):
+                    current_answers.append(stripped)  # Ensure drop-down definitions get captured
                 else:
                     current_answers.append(text)
+
+
 
         elif isinstance(block, Table):
             rows = block.rows
@@ -238,4 +336,4 @@ if uploaded_file:
     st.subheader("Generated XML Output")
     final_output = "\n\n".join(xml_blocks)
     st.code(final_output, language="xml")
-    st.download_button("📥 Download XML Output", final_output, file_name="survey_output.txt", mime="text/plain")
+    st.download_button("📅 Download XML Output", final_output, file_name="survey_output.txt", mime="text/plain")
