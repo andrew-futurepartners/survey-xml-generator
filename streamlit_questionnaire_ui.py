@@ -293,8 +293,6 @@ if uploaded_file:
                 else:
                     current_answers.append(text)
 
-
-
         elif isinstance(block, Table):
             rows = block.rows
             if label and title and instruction:
