@@ -107,22 +107,28 @@ def finalize_question(label, title, instruction, answers, modifiers):
             continue
         filtered_answers.append(a)
 
-    drop_down_row = next((a for a in filtered_answers if "<drop down>" in a.lower()), None)
+    drop_down_row = next((a for a in filtered_answers if "drop down" in a.lower()), None)
     if drop_down_row:
-        range_match = re.search(r'\[([^\[\]\u2013-]+)[\u2013-]([^\[\]\u2013-]+)\]', drop_down_row)
-        if range_match:
-            left = range_match.group(1).strip()
-            right = range_match.group(2).strip()
-            left_num = re.match(r'(\d+)(.*)', left)
-            right_num = re.match(r'(\d+)(.*)', right)
-            if left_num and right_num:
-                start = int(left_num.group(1))
-                end = int(right_num.group(1))
-                left_text = left_num.group(2).strip()
-                right_text = right_num.group(2).strip()
-                choices = [f"{start} {left_text}".strip()] + [str(n) for n in range(start + 1, end)] + [f"{end} {right_text}".strip()]
-            else:
-                choices = ["PASTE CHOICE OPTIONS"]
+        # Normalize brackets (handle both <...> and [...] cases)
+        drop_down_row = re.sub(r'[<\[]\s*drop down\s*[–-]\s*(.*?)\s*[>\]]', r'\1', drop_down_row, flags=re.IGNORECASE)
+
+        # Match optional prefix and number range (e.g., "After 2007-1910" or "0-100 or more")
+        match = re.match(r'(?:([A-Za-z ]+)\s+)?(\d+)\s*[-–]\s*(\d+)(?:\s*([A-Za-z ]+))?', drop_down_row.strip())
+        if match:
+            prefix = (match.group(1) or "").strip()
+            start = int(match.group(2))
+            end = int(match.group(3))
+            suffix = (match.group(4) or "").strip()
+
+            step = -1 if start > end else 1
+            choices = []
+            for i in range(start, end + step, step):
+                text = str(i)
+                if i == start and prefix:
+                    text = f"{prefix} {text}"
+                if i == end and suffix:
+                    text = f"{text} {suffix}"
+                choices.append(text)
         else:
             choices = ["PASTE CHOICE OPTIONS"]
 
