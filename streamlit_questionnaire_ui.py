@@ -10,6 +10,11 @@ from io import BytesIO
 st.set_page_config(page_title="Survey XML Generator", layout="wide")
 st.title("📄 Survey Questionnaire to XML")
 
+def normalize_brackets(text):
+    """Convert < > and [ ] brackets to a unified format using [ ] for consistent parsing."""
+    text = re.sub(r'<([^<>]+)>', r'[\1]', text)  # Convert <...> to [...]
+    return text
+
 # === CODE BLOCK: Utility Functions ===
 def iter_block_items(parent):
     for child in parent.element.body.iterchildren():
@@ -107,22 +112,25 @@ def finalize_question(label, title, instruction, answers, modifiers):
             continue
         filtered_answers.append(a)
 
-    drop_down_row = next((a for a in filtered_answers if "<drop down>" in a.lower()), None)
+    drop_down_row = next((a for a in filtered_answers if "drop down" in a.lower()), None)
     if drop_down_row:
-        range_match = re.search(r'\[([^\[\]\u2013-]+)[\u2013-]([^\[\]\u2013-]+)\]', drop_down_row)
+        # Enhanced flexible range matching
+        range_match = re.search(r'[\[<]([^\[\]<>–—\-]*?)(\d+)\s*[\u2013\u2014\-]\s*(\d+)([^\[\]<>–—\-]*?)[\]>]', drop_down_row)
         if range_match:
-            left = range_match.group(1).strip()
-            right = range_match.group(2).strip()
-            left_num = re.match(r'(\d+)(.*)', left)
-            right_num = re.match(r'(\d+)(.*)', right)
-            if left_num and right_num:
-                start = int(left_num.group(1))
-                end = int(right_num.group(1))
-                left_text = left_num.group(2).strip()
-                right_text = right_num.group(2).strip()
-                choices = [f"{start} {left_text}".strip()] + [str(n) for n in range(start + 1, end)] + [f"{end} {right_text}".strip()]
-            else:
-                choices = ["PASTE CHOICE OPTIONS"]
+            prefix = range_match.group(1).strip()
+            start = int(range_match.group(2))
+            end = int(range_match.group(3))
+            suffix = range_match.group(4).strip()
+
+            step = 1 if start < end else -1
+            choices = []
+            for i in range(start, end + step, step):
+                label_text = str(i)
+                if i == start and prefix:
+                    label_text = f"{prefix} {label_text}".strip()
+                if i == end and suffix:
+                    label_text = f"{label_text} {suffix}".strip()
+                choices.append(label_text)
         else:
             choices = ["PASTE CHOICE OPTIONS"]
 
@@ -135,7 +143,6 @@ def finalize_question(label, title, instruction, answers, modifiers):
         return "\n".join(xml_lines)
 
     if not filtered_answers:
-        # --- force qZipCode to always be a text input ---
         if label.lower() == "qzipcode":
             verify_type = None
             for mod in modifiers:
@@ -230,7 +237,7 @@ if uploaded_file:
 
     for block in block_iter:
         if isinstance(block, Paragraph):
-            text = block.text.strip()
+            text = normalize_brackets(block.text.strip())
 
             if text.startswith("[") and text[1:8].lower() == "comment":
                 lbl, content = clean_label_and_title(text)
