@@ -10,9 +10,6 @@ from io import BytesIO
 st.set_page_config(page_title="Survey XML Generator", layout="wide")
 st.title("📄 Survey Questionnaire to XML")
 
-def normalize_brackets(text):
-    return re.sub(r'<([^<>]+)>', r'[\1]', text)
-
 # === CODE BLOCK: Utility Functions ===
 def iter_block_items(parent):
     for child in parent.element.body.iterchildren():
@@ -110,25 +107,22 @@ def finalize_question(label, title, instruction, answers, modifiers):
             continue
         filtered_answers.append(a)
 
-    drop_down_row = next((a for a in filtered_answers if "drop down" in a.lower()), None)
+    drop_down_row = next((a for a in filtered_answers if "<drop down>" in a.lower()), None)
     if drop_down_row:
-        drop_down_row = normalize_brackets(drop_down_row)
-        range_match = re.search(r'[\[<]([^\[\]<>\u2013\u2014\-]*?)(\d+)\s*[\u2013\u2014\-]\s*(\d+)([^\[\]<>\u2013\u2014\-]*?)[\]>]', drop_down_row)
+        range_match = re.search(r'\[([^\[\]\u2013-]+)[\u2013-]([^\[\]\u2013-]+)\]', drop_down_row)
         if range_match:
-            before = range_match.group(1).strip()
-            start = int(range_match.group(2))
-            end = int(range_match.group(3))
-            after = range_match.group(4).strip()
-
-            step = 1 if start < end else -1
-            choices = []
-            for i in range(start, end + step, step):
-                label_text = str(i)
-                if before:
-                    label_text = f"{before} {label_text}".strip()
-                if after:
-                    label_text = f"{label_text} {after}".strip()
-                choices.append(label_text)
+            left = range_match.group(1).strip()
+            right = range_match.group(2).strip()
+            left_num = re.match(r'(\d+)(.*)', left)
+            right_num = re.match(r'(\d+)(.*)', right)
+            if left_num and right_num:
+                start = int(left_num.group(1))
+                end = int(right_num.group(1))
+                left_text = left_num.group(2).strip()
+                right_text = right_num.group(2).strip()
+                choices = [f"{start} {left_text}".strip()] + [str(n) for n in range(start + 1, end)] + [f"{end} {right_text}".strip()]
+            else:
+                choices = ["PASTE CHOICE OPTIONS"]
         else:
             choices = ["PASTE CHOICE OPTIONS"]
 
@@ -141,6 +135,7 @@ def finalize_question(label, title, instruction, answers, modifiers):
         return "\n".join(xml_lines)
 
     if not filtered_answers:
+        # --- force qZipCode to always be a text input ---
         if label.lower() == "qzipcode":
             verify_type = None
             for mod in modifiers:
@@ -219,47 +214,6 @@ def finalize_question(label, title, instruction, answers, modifiers):
 
     return "\n".join(xml_lines)
 
-    has_modifiers = any("exclusive" in a.lower() or "anchor" in a.lower() for a in filtered_answers)
-    anchor_present = any("anchor" in a.lower() for a in filtered_answers)
-    randomize_flag = any("random" in a.lower() for a in answers + [instruction] + modifiers)
-    max_limit = detect_atmost(instruction)
-    is_multiselect = ("all that apply" in instruction.lower()) or max_limit or has_modifiers
-
-    if is_multiselect:
-        checkbox_attrs = [f'label="{label}"', 'atleast="1"']
-        if randomize_flag or anchor_present:
-            checkbox_attrs.append('shuffle="rows"')
-        if max_limit:
-            checkbox_attrs.append(f'atmost="{max_limit}"')
-
-        xml_lines = [f'<checkbox {" ".join(checkbox_attrs)}>']
-        xml_lines.append(f'  <title>{title}</title>')
-        xml_lines.append(f'  <comment><span>{instruction}</span></comment>')
-        for idx, ans in enumerate(filtered_answers, 1):
-            text = re.sub(r'\[.*?\]', '', ans).strip()
-            modifiers = re.findall(r'\[(.*?)\]', ans)
-            flags = []
-            if any("exclusive" in m.lower() for m in modifiers):
-                flags.append('exclusive="1"')
-            if any("anchor" in m.lower() for m in modifiers):
-                flags.append('randomize="0"')
-            attr = " ".join(flags)
-            xml_lines.append(f'  <row label="r{idx}" {attr}>{text}</row>' if attr else f'  <row label="r{idx}">{text}</row>')
-        xml_lines.append('</checkbox>')
-        return "\n".join(xml_lines)
-
-    radio_attrs = [f'label="{label}"']
-    if randomize_flag:
-        radio_attrs.append('shuffle="rows"')
-    xml_lines = [f'<radio {" ".join(radio_attrs)}>']
-    xml_lines.append(f'  <title>{title}</title>')
-    xml_lines.append(f'  <comment>{instruction}</comment>')
-    for idx, ans in enumerate(filtered_answers, 1):
-        xml_lines.append(f'  <row label="r{idx}">{ans}</row>')
-    xml_lines.append('</radio>')
-
-    return "\n".join(xml_lines)
-
 # === CODE BLOCK: Streamlit App UI and Execution ===
 uploaded_file = st.file_uploader("Upload your .docx questionnaire file", type="docx")
 
@@ -276,7 +230,7 @@ if uploaded_file:
 
     for block in block_iter:
         if isinstance(block, Paragraph):
-            text = normalize_brackets(block.text.strip())
+            text = block.text.strip()
 
             if text.startswith("[") and text[1:8].lower() == "comment":
                 lbl, content = clean_label_and_title(text)
@@ -338,6 +292,8 @@ if uploaded_file:
                     current_answers.append(stripped)  # Ensure drop-down definitions get captured
                 else:
                     current_answers.append(text)
+
+
 
         elif isinstance(block, Table):
             rows = block.rows
