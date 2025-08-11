@@ -112,11 +112,8 @@ def finalize_question(label, title, instruction, answers, modifiers):
 
     drop_down_row = next((a for a in filtered_answers if "drop down" in a.lower()), None)
     if drop_down_row:
-        drop_down_row = normalize_brackets(drop_down_row)  # Normalize brackets to []
-
-    if drop_down_row:
-        # Enhanced flexible range matching
-        range_match = re.search(r'[\[<]([^\[\]<>–—\-]*?)(\d+)\s*[\u2013\u2014\-]\s*(\d+)([^\[\]<>–—\-]*?)[\]>]', drop_down_row)
+        drop_down_row = normalize_brackets(drop_down_row)
+        range_match = re.search(r'[\[<]([^\[\]<>\u2013\u2014\-]*?)(\d+)\s*[\u2013\u2014\-]\s*(\d+)([^\[\]<>\u2013\u2014\-]*?)[\]>]', drop_down_row)
         if range_match:
             before = range_match.group(1).strip()
             start = int(range_match.group(2))
@@ -127,9 +124,9 @@ def finalize_question(label, title, instruction, answers, modifiers):
             choices = []
             for i in range(start, end + step, step):
                 label_text = str(i)
-                if i == start and before:
+                if before:
                     label_text = f"{before} {label_text}".strip()
-                if i == end and after:
+                if after:
                     label_text = f"{label_text} {after}".strip()
                 choices.append(label_text)
         else:
@@ -180,6 +177,47 @@ def finalize_question(label, title, instruction, answers, modifiers):
                 f'</text>'
             ]
         return "\n".join(xml_lines)
+
+    has_modifiers = any("exclusive" in a.lower() or "anchor" in a.lower() for a in filtered_answers)
+    anchor_present = any("anchor" in a.lower() for a in filtered_answers)
+    randomize_flag = any("random" in a.lower() for a in answers + [instruction] + modifiers)
+    max_limit = detect_atmost(instruction)
+    is_multiselect = ("all that apply" in instruction.lower()) or max_limit or has_modifiers
+
+    if is_multiselect:
+        checkbox_attrs = [f'label="{label}"', 'atleast="1"']
+        if randomize_flag or anchor_present:
+            checkbox_attrs.append('shuffle="rows"')
+        if max_limit:
+            checkbox_attrs.append(f'atmost="{max_limit}"')
+
+        xml_lines = [f'<checkbox {" ".join(checkbox_attrs)}>']
+        xml_lines.append(f'  <title>{title}</title>')
+        xml_lines.append(f'  <comment><span>{instruction}</span></comment>')
+        for idx, ans in enumerate(filtered_answers, 1):
+            text = re.sub(r'\[.*?\]', '', ans).strip()
+            modifiers = re.findall(r'\[(.*?)\]', ans)
+            flags = []
+            if any("exclusive" in m.lower() for m in modifiers):
+                flags.append('exclusive="1"')
+            if any("anchor" in m.lower() for m in modifiers):
+                flags.append('randomize="0"')
+            attr = " ".join(flags)
+            xml_lines.append(f'  <row label="r{idx}" {attr}>{text}</row>' if attr else f'  <row label="r{idx}">{text}</row>')
+        xml_lines.append('</checkbox>')
+        return "\n".join(xml_lines)
+
+    radio_attrs = [f'label="{label}"']
+    if randomize_flag:
+        radio_attrs.append('shuffle="rows"')
+    xml_lines = [f'<radio {" ".join(radio_attrs)}>']
+    xml_lines.append(f'  <title>{title}</title>')
+    xml_lines.append(f'  <comment>{instruction}</comment>')
+    for idx, ans in enumerate(filtered_answers, 1):
+        xml_lines.append(f'  <row label="r{idx}">{ans}</row>')
+    xml_lines.append('</radio>')
+
+    return "\n".join(xml_lines)
 
     has_modifiers = any("exclusive" in a.lower() or "anchor" in a.lower() for a in filtered_answers)
     anchor_present = any("anchor" in a.lower() for a in filtered_answers)
