@@ -11,9 +11,7 @@ st.set_page_config(page_title="Survey XML Generator", layout="wide")
 st.title("📄 Survey Questionnaire to XML")
 
 def normalize_brackets(text):
-    """Convert < > and [ ] brackets to a unified format using [ ] for consistent parsing."""
-    text = re.sub(r'<([^<>]+)>', r'[\1]', text)  # Convert <...> to [...]
-    return text
+    return re.sub(r'<([^<>]+)>', r'[\1]', text)
 
 # === CODE BLOCK: Utility Functions ===
 def iter_block_items(parent):
@@ -113,6 +111,9 @@ def finalize_question(label, title, instruction, answers, modifiers):
         filtered_answers.append(a)
 
     drop_down_row = next((a for a in filtered_answers if "drop down" in a.lower()), None)
+    if drop_down_row:
+        drop_down_row = normalize_brackets(drop_down_row)  # Normalize brackets to []
+
     if drop_down_row:
         # Enhanced flexible range matching
         range_match = re.search(r'[\[<]([^\[\]<>–—\-]*?)(\d+)\s*[\u2013\u2014\-]\s*(\d+)([^\[\]<>–—\-]*?)[\]>]', drop_down_row)
