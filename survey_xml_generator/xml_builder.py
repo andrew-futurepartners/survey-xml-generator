@@ -31,6 +31,15 @@ def _esc(text: str) -> str:
     )
 
 
+def _esc_title(text: str) -> str:
+    """Escape title text and convert newlines to <br/> tags."""
+    escaped = _esc(text)
+    escaped = escaped.replace("\r\n", "\n").replace("\r", "\n")
+    escaped = escaped.replace("\n\n", "<br/><br/>")
+    escaped = escaped.replace("\n", "<br/>")
+    return escaped
+
+
 def _attr_str(attrs: Dict[str, str]) -> str:
     """Build an attribute string from a dict, skipping None/empty values."""
     parts = []
@@ -132,7 +141,7 @@ def build_radio(q: Dict[str, Any]) -> str:
         attrs["averages"] = q["averages"]
 
     lines = [f"<radio {_attr_str(attrs)}>"]
-    lines.append(f"  <title>{_esc(q.get('title', ''))}</title>")
+    lines.append(f"  <title>{_esc_title(q.get('title', ''))}</title>")
     if q.get("comment"):
         lines.append(f"  <comment>{_esc(q['comment'])}</comment>")
 
@@ -178,7 +187,7 @@ def build_checkbox(q: Dict[str, Any]) -> str:
         attrs["cond"] = q["cond"]
 
     lines = [f"<checkbox {_attr_str(attrs)}>"]
-    lines.append(f"  <title>{_esc(q.get('title', ''))}</title>")
+    lines.append(f"  <title>{_esc_title(q.get('title', ''))}</title>")
     if q.get("comment"):
         lines.append(f"  <comment>{_esc(q['comment'])}</comment>")
 
@@ -218,7 +227,7 @@ def build_select(q: Dict[str, Any]) -> str:
         attrs["cond"] = q["cond"]
 
     lines = [f"<select {_attr_str(attrs)}>"]
-    lines.append(f"  <title>{_esc(q.get('title', ''))}</title>")
+    lines.append(f"  <title>{_esc_title(q.get('title', ''))}</title>")
     if q.get("comment"):
         lines.append(f"  <comment>{_esc(q['comment'])}</comment>")
 
@@ -284,7 +293,7 @@ def build_text(q: Dict[str, Any]) -> str:
         attrs["cond"] = q["cond"]
 
     lines = [f"<text {_attr_str(attrs)}>"]
-    lines.append(f"  <title>{_esc(q.get('title', ''))}</title>")
+    lines.append(f"  <title>{_esc_title(q.get('title', ''))}</title>")
     if q.get("comment"):
         lines.append(f"  <comment>{_esc(q['comment'])}</comment>")
 
@@ -314,7 +323,7 @@ def build_textarea(q: Dict[str, Any]) -> str:
         attrs["cond"] = q["cond"]
 
     lines = [f"<textarea {_attr_str(attrs)}>"]
-    lines.append(f"  <title>{_esc(q.get('title', ''))}</title>")
+    lines.append(f"  <title>{_esc_title(q.get('title', ''))}</title>")
     if q.get("comment"):
         lines.append(f"  <comment>{_esc(q['comment'])}</comment>")
     lines.append("</textarea>")
@@ -334,7 +343,7 @@ def build_number(q: Dict[str, Any]) -> str:
         attrs["cond"] = q["cond"]
 
     lines = [f"<number {_attr_str(attrs)}>"]
-    lines.append(f"  <title>{_esc(q.get('title', ''))}</title>")
+    lines.append(f"  <title>{_esc_title(q.get('title', ''))}</title>")
     if q.get("comment"):
         lines.append(f"  <comment>{_esc(q['comment'])}</comment>")
 
@@ -387,6 +396,7 @@ def build_block_open(
     label: str,
     title: Optional[str] = None,
     randomize_children: bool = False,
+    randomize: bool = False,
     cond: Optional[str] = None,
 ) -> str:
     """Opening tag for a Forsta <block> element."""
@@ -397,6 +407,8 @@ def build_block_open(
         attrs["builder:title"] = title
     if randomize_children:
         attrs["randomizeChildren"] = "1"
+    if randomize:
+        attrs["randomize"] = "1"
     return f"<block {_attr_str(attrs)}>"
 
 

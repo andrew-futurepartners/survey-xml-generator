@@ -72,7 +72,7 @@ ANSWER ATTRIBUTE DETECTION:
 - [EXCLUSIVE] or [ANCHORED, EXCLUSIVE] -> exclusive="1" on that row
 - [ANCHOR] or [ANCHORED] -> randomize="0" on that row
 - [RANDOMIZE] on the question -> shuffle="rows" on the question element
-- "Other, specify" or "Other (please specify)" -> open="1", openSize="25"
+- "Other, specify" or "Other (please specify)" or [OPEN END] -> open="1", openSize="25". Plain "Other" WITHOUT any specify/open-end language must NOT get open="1".
 - "None of the above" or "None of these" -> randomize="0", exclusive="1"
 
 DROPDOWN / SELECT CLASSIFICATION:

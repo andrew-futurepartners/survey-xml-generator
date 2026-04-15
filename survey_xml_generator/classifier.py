@@ -289,6 +289,42 @@ def _fix_agree_disagree_statements(
                         )
 
 
+_STATEMENT_SPLIT_RE = re.compile(
+    r"(following\s+statements?[?.!:;\s]+)",
+    re.IGNORECASE,
+)
+
+
+def _format_statement_titles(questions: List[dict]) -> None:
+    """Insert a line break between the question stem and inline statement.
+
+    When the AI returns a title like "How much do you agree with the
+    following statement? My family goes out of its way..." all on one line,
+    this inserts ``\\n\\n`` so that ``_esc_title`` can later convert it to
+    ``<br/><br/>`` for proper rendering in Forsta.
+    """
+    for q in questions:
+        ft = (q.get("forsta_type") or "").lower()
+        if ft != "radio":
+            continue
+        title = q.get("title") or ""
+        if "\n" in title:
+            continue
+
+        m = _STATEMENT_SPLIT_RE.search(title)
+        if not m:
+            continue
+
+        before = title[: m.end()].rstrip()
+        after = title[m.end() :].strip()
+        if len(after) > 10:
+            q["title"] = f"{before}\n\n{after}"
+            logger.info(
+                f"Formatted statement line break in {q.get('label')}: "
+                f"...{after[:50]}..."
+            )
+
+
 def _ensure_comments(questions: List[dict]) -> None:
     """Add default ``comment`` to radio/checkbox questions that lack one."""
     _TF = frozenset({"true", "false"})
@@ -307,6 +343,113 @@ def _ensure_comments(questions: List[dict]) -> None:
                 q["comment"] = "Select one."
         elif ft == "checkbox":
             q["comment"] = "Select all that apply."
+
+
+_ANCHOR_EXCLUSIVE_RE = re.compile(
+    r"^(?:none(?:\s+of\s+the\s+(?:above|these))?|all\s+of\s+the\s+(?:above|these))$",
+    re.IGNORECASE,
+)
+
+_ANCHOR_ONLY_RE = re.compile(
+    r"^(?:"
+    r"other(?:\s*[\(,].*)?|"
+    r"(?:i\s+)?don'?t\s+know|"
+    r"not\s+sure|unsure|"
+    r"n/?a|not\s+applicable|"
+    r"prefer\s+not\s+to\s+(?:answer|say|respond)"
+    r")$",
+    re.IGNORECASE,
+)
+
+
+def _enforce_anchor_exclusive(questions: List[dict]) -> None:
+    """Auto-anchor catch-all answers and mark them exclusive on checkboxes.
+
+    Ensures answers like "None of the above", "Other (specify)", "I don't
+    know", etc. always have ``randomize="0"`` and, for checkbox questions,
+    ``exclusive="1"`` where appropriate -- even if the document or AI did
+    not explicitly mark them.
+    """
+    for q in questions:
+        ft = (q.get("forsta_type") or "").lower()
+        if ft not in ("radio", "checkbox"):
+            continue
+
+        is_checkbox = ft == "checkbox"
+        for ans in q.get("answers") or []:
+            text = (ans.get("text") or "").strip()
+            if not text:
+                continue
+
+            if _ANCHOR_EXCLUSIVE_RE.match(text):
+                if ans.get("randomize") is None:
+                    ans["randomize"] = "0"
+                    logger.info(f"Auto-anchored '{text}' in {q.get('label')}")
+                if is_checkbox and not ans.get("exclusive"):
+                    ans["exclusive"] = "1"
+                    logger.info(f"Auto-exclusive '{text}' in {q.get('label')}")
+            elif _ANCHOR_ONLY_RE.match(text):
+                if ans.get("randomize") is None:
+                    ans["randomize"] = "0"
+                    logger.info(f"Auto-anchored '{text}' in {q.get('label')}")
+
+
+_OPEN_END_INDICATOR_RE = re.compile(
+    r"specify|open\s*end|open\-end|\[open\s*end\]|\[open\]",
+    re.IGNORECASE,
+)
+
+_PLAIN_OTHER_RE = re.compile(r"^other$", re.IGNORECASE)
+
+
+def _guard_other_open_end(
+    questions: List[dict],
+    original_segments: List[dict],
+) -> None:
+    """Strip ``open``/``openSize`` from "Other" rows unless the document
+    explicitly requested an open-end (via "specify", "[OPEN END]", etc.).
+
+    The AI sometimes adds ``open="1"`` to plain "Other" answers even when
+    the questionnaire has no open-end indicator.
+    """
+    seg_by_label: Dict[str, dict] = {}
+    for seg in original_segments:
+        lbl = seg.get("label", "")
+        if lbl:
+            seg_by_label[lbl] = seg
+
+    for q in questions:
+        ft = (q.get("forsta_type") or "").lower()
+        if ft not in ("radio", "checkbox"):
+            continue
+
+        for ans in q.get("answers") or []:
+            if not ans.get("open"):
+                continue
+
+            text = (ans.get("text") or "").strip()
+            if not _PLAIN_OTHER_RE.match(text):
+                continue
+
+            seg = seg_by_label.get(q.get("label", ""))
+            if seg:
+                for line in seg.get("answer_lines") or []:
+                    if "other" in line.lower() and _OPEN_END_INDICATOR_RE.search(line):
+                        break
+                else:
+                    ans.pop("open", None)
+                    ans.pop("openSize", None)
+                    logger.info(
+                        f"Stripped open-end from plain 'Other' in "
+                        f"{q.get('label')}: no open-end indicator in source"
+                    )
+            else:
+                ans.pop("open", None)
+                ans.pop("openSize", None)
+                logger.info(
+                    f"Stripped open-end from plain 'Other' in "
+                    f"{q.get('label')}: no source segment to verify"
+                )
 
 
 def _guard_explicit_answers(
@@ -771,7 +914,10 @@ def classify_segments(
     # Deterministic post-processing
     _guard_explicit_answers(all_questions, classifiable)
     _fix_agree_disagree_statements(all_questions, classifiable)
+    _format_statement_titles(all_questions)
     _ensure_comments(all_questions)
+    _enforce_anchor_exclusive(all_questions)
+    _guard_other_open_end(all_questions, classifiable)
 
     # Now interleave passthrough elements (pagebreaks, comments) back
     # into the question list in their original document order.

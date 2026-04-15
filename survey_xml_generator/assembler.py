@@ -203,6 +203,73 @@ def _ensure_suspend_before_terms(
 
 
 # ---------------------------------------------------------------------------
+# Term condition inheritance
+# ---------------------------------------------------------------------------
+
+def _propagate_conditions_to_terms(
+    questions: List[dict],
+    conditions: List[dict],
+) -> List[dict]:
+    """AND the parent question's visibility condition into dependent terms.
+
+    When a term references a question that itself has conditional visibility
+    (a ``cond`` attribute), respondents who are never shown the question
+    would otherwise be falsely terminated.  This pass appends the question's
+    ``cond`` to the term's ``cond`` with an ``and`` clause so the term only
+    fires for respondents who actually saw the question.
+
+    Example::
+
+        qTripsP3Y  cond="condition.US_Respondent"
+        termTripsP3Y  cond="(qTripsP3Y.check('0'))"
+        ->  termTripsP3Y  cond="(qTripsP3Y.check('0')) and (condition.US_Respondent)"
+    """
+    label_to_cond: Dict[str, str] = {}
+    for q in questions:
+        lbl = q.get("label")
+        cond = q.get("cond")
+        if lbl and cond and q.get("forsta_type") != "term":
+            label_to_cond[lbl] = cond
+
+    for q in questions:
+        if q.get("forsta_type") != "term":
+            continue
+
+        term_cond = q.get("cond", "")
+        if not term_cond:
+            continue
+
+        ref_labels = _extract_referenced_labels(term_cond, conditions)
+        if not ref_labels:
+            continue
+
+        extra_conds: List[str] = []
+        for ref in sorted(ref_labels):
+            q_cond = label_to_cond.get(ref)
+            if not q_cond:
+                continue
+            if q_cond in term_cond:
+                continue
+            if q_cond not in extra_conds:
+                extra_conds.append(q_cond)
+
+        if not extra_conds:
+            continue
+
+        for ec in extra_conds:
+            wrapped = f"({ec})" if not ec.startswith("(") else ec
+            term_cond = f"{term_cond} and {wrapped}"
+
+        q["cond"] = term_cond
+        logger.info(
+            f"Propagated condition to term '{q.get('label', '?')}': "
+            f"{q['cond']}"
+        )
+
+    return questions
+
+
+# ---------------------------------------------------------------------------
 # Block XML emission helper
 # ---------------------------------------------------------------------------
 
@@ -263,6 +330,9 @@ def assemble_xml(
 
     # --- Ensure suspend before terms ---
     questions = _ensure_suspend_before_terms(questions, conditions)
+
+    # --- Propagate question visibility conditions to dependent terms ---
+    questions = _propagate_conditions_to_terms(questions, conditions)
 
     # --- Build root attributes ---
     root_attrs = dict(SURVEY_ROOT_DEFAULTS)
@@ -329,8 +399,9 @@ def assemble_xml(
                     xml_lines.append("")
 
             indent = "  " * indent_level
+            inside_randomize_parent = block_stack and block_stack[-1]["is_parent"]
             xml_lines.append(
-                f"{indent}{build_block_open(q['label'], title=q.get('block_title'), randomize_children=is_parent, cond=q.get('cond'))}"
+                f"{indent}{build_block_open(q['label'], title=q.get('block_title'), randomize_children=is_parent, randomize=inside_randomize_parent and not is_parent, cond=q.get('cond'))}"
             )
             block_stack.append({"label": q["label"], "is_parent": is_parent})
             indent_level += 1
