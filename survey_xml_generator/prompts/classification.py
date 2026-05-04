@@ -78,6 +78,8 @@ ANSWER ATTRIBUTE DETECTION:
 DROPDOWN / SELECT CLASSIFICATION:
 Any question with a dropdown indicator becomes forsta_type "select".
 
+**DEFAULT RULE:** If the source segment does NOT contain an explicit dropdown indicator ([DROPDOWN], DROPDOWN YEARS, DROPDOWN STATES, etc.) in its text or inline_modifiers, classify single-select questions as "radio" -- NOT "select". Only use forsta_type "select" when a dropdown indicator is explicitly present in the segment, or when auto-populating a known long list (countries, states, year ranges). A short list of explicit answer options (e.g. "None", "1", "2", "3", "4", "5 - 10", "More than 10") without a [DROPDOWN] tag should ALWAYS be "radio" with row labels (r1, r2, ...), never "select" with choice labels.
+
 **IMPORTANT: Explicit lists override auto-population.**
 If the questionnaire provides a specific numbered list of answer options for a country, state, or any other dropdown, you MUST include those as "answers" (like radio/checkbox) and set special_handling to null. The builder only auto-populates when no list is given.
 
@@ -140,7 +142,8 @@ IMPORTANT RULES:
    - Combination: (qLabel.check('0-32,45,95'))
    Example: TERM IF QTRIPS P3Y == 0 -> cond="(qTripsP3Y.check('0'))"
    The builder will also auto-convert any plain numeric equality (qLabel=N) to .check() format.
-10. For **agree/disagree with the following statement** questions: The title MUST always contain both the question stem AND the specific statement text. For example, if the segment has title_text "How much do you agree or disagree with the following statement? A leisure destination with great spa services is my kind of destination." then the FULL text including the statement MUST appear in the output title -- NEVER truncate it to just "How much do you agree or disagree with the following statement?" without the statement. If the statement appears as the first answer_line instead, move it into the title. The answer rows should only contain the Likert scale: Strongly agree, Agree, Slightly agree, Neutral, Slightly disagree, Disagree, Strongly disagree."""
+10. For **agree/disagree with the following statement** questions: The title MUST always contain both the question stem AND the specific statement text. For example, if the segment has title_text "How much do you agree or disagree with the following statement? A leisure destination with great spa services is my kind of destination." then the FULL text including the statement MUST appear in the output title -- NEVER truncate it to just "How much do you agree or disagree with the following statement?" without the statement. If the statement appears as the first answer_line instead, move it into the title. The answer rows should only contain the Likert scale: Strongly agree, Agree, Slightly agree, Neutral, Slightly disagree, Disagree, Strongly disagree.
+11. If the segment's title_text contains newline characters (\\n), preserve them in the output title. Multi-paragraph question text must keep its line breaks so the XML builder can render them correctly."""
 
 
 USER_PROMPT_TEMPLATE = """Classify each question block below into Forsta XML format. Also generate any condition definitions needed for branching/termination logic.

@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import re
 
 from .ai_client import call_ai
-from .config import OPENAI_MODEL, SEGMENTATION_CHUNK_SIZE, SEGMENTATION_CHUNK_OVERLAP
+from .config import OPENAI_MODEL, SEGMENTATION_CHUNK_SIZE, SEGMENTATION_CHUNK_OVERLAP, SELECT_TO_RADIO_MAX_OPTIONS
 from .data.countries import COUNTRIES, COUNTRY_NAME_TO_CODE
 from .data.us_states import US_STATES
 from .prompts.classification import SYSTEM_PROMPT, build_classification_prompt
@@ -289,6 +289,45 @@ def _fix_agree_disagree_statements(
                         )
 
 
+def _recover_title_newlines(
+    questions: List[dict],
+    original_segments: List[dict],
+) -> None:
+    """Restore newlines stripped by the classifier AI.
+
+    If the segmenter preserved ``\\n`` characters in ``title_text`` but the
+    classifier AI returned a flat single-line ``title``, this restores the
+    original line breaks so ``_esc_title`` can render them as ``<br/>``.
+    """
+    seg_by_label: Dict[str, dict] = {}
+    for seg in original_segments:
+        lbl = seg.get("label", "")
+        if lbl:
+            seg_by_label[lbl] = seg
+
+    for q in questions:
+        title = q.get("title") or ""
+        if not title or "\n" in title:
+            continue
+
+        seg = seg_by_label.get(q.get("label", ""))
+        if not seg:
+            continue
+
+        seg_title = seg.get("title_text") or ""
+        if "\n" not in seg_title:
+            continue
+
+        flat_seg = seg_title.replace("\r\n", " ").replace("\n", " ").replace("  ", " ").strip()
+        flat_q = title.replace("  ", " ").strip()
+        if flat_seg == flat_q or flat_q in flat_seg:
+            q["title"] = seg_title
+            logger.info(
+                f"Recovered newlines in title for {q.get('label')} "
+                f"from segment title_text"
+            )
+
+
 _STATEMENT_SPLIT_RE = re.compile(
     r"(following\s+statements?[?.!:;\s]+)",
     re.IGNORECASE,
@@ -305,7 +344,7 @@ def _format_statement_titles(questions: List[dict]) -> None:
     """
     for q in questions:
         ft = (q.get("forsta_type") or "").lower()
-        if ft != "radio":
+        if ft in ("suspend", "block_start", "block_end", "note", ""):
             continue
         title = q.get("title") or ""
         if "\n" in title:
@@ -500,6 +539,100 @@ def _guard_explicit_answers(
         q["choices"] = []
 
 
+_DROPDOWN_RE = re.compile(r"dropdown", re.IGNORECASE)
+
+
+def _guard_select_without_dropdown(
+    questions: List[dict],
+    original_segments: List[dict],
+    all_conditions: Optional[List[dict]] = None,
+) -> None:
+    """Convert ``select`` questions to ``radio`` when the source has no dropdown indicator.
+
+    The LLM sometimes classifies short explicit-option single-select
+    questions as ``select`` (dropdown) instead of ``radio``, and it does
+    so inconsistently across classification chunks.  This guard enforces
+    a deterministic rule: if the source segment has no ``[DROPDOWN]``
+    indicator and the option count is within a configurable threshold,
+    force the question to ``radio``.
+
+    Must run **before** ``_resolve_cond_references`` so the condition
+    resolver picks up the corrected ``r*`` labels naturally.
+    """
+    seg_by_label: Dict[str, dict] = {}
+    for seg in original_segments:
+        lbl = seg.get("label", "")
+        if lbl:
+            seg_by_label[lbl] = seg
+
+    converted_labels: Dict[str, Dict[str, str]] = {}
+
+    for q in questions:
+        if q.get("forsta_type") != "select":
+            continue
+        if q.get("special_handling"):
+            continue
+
+        lbl = q.get("label", "")
+        seg = seg_by_label.get(lbl)
+        if not seg:
+            continue
+
+        modifiers = seg.get("inline_modifiers") or []
+        title = seg.get("title_text") or ""
+        if any(_DROPDOWN_RE.search(m) for m in modifiers) or _DROPDOWN_RE.search(title):
+            continue
+
+        options = q.get("choices") or q.get("answers") or []
+        if len(options) > SELECT_TO_RADIO_MAX_OPTIONS:
+            continue
+
+        logger.info(
+            f"Guard: '{lbl}' is select with {len(options)} options and no "
+            f"[DROPDOWN] indicator -- converting to radio"
+        )
+        q["forsta_type"] = "radio"
+
+        if q.get("choices") and not q.get("answers"):
+            q["answers"] = q["choices"]
+        q["choices"] = []
+
+        label_map: Dict[str, str] = {}
+        for i, ans in enumerate(q.get("answers") or [], 1):
+            old_label = ans.get("label", "")
+            if old_label.startswith("ch"):
+                new_label = f"r{i}"
+                label_map[old_label] = new_label
+                ans["label"] = new_label
+
+        if label_map:
+            converted_labels[lbl] = label_map
+
+    if not converted_labels:
+        return
+
+    # Safety-net sweep: update any stale (qLabel.chN) references that the
+    # LLM may have emitted directly instead of using match= syntax.
+    def _rewrite_cond(expr: str) -> str:
+        if not expr:
+            return expr
+        for qlabel, lmap in converted_labels.items():
+            for old, new in lmap.items():
+                expr = expr.replace(f"{qlabel}.{old}", f"{qlabel}.{new}")
+        return expr
+
+    if all_conditions:
+        for cond in all_conditions:
+            c = cond.get("cond")
+            if c:
+                cond["cond"] = _rewrite_cond(c)
+
+    for q in questions:
+        c = q.get("cond")
+        if c:
+            q["cond"] = _rewrite_cond(c)
+
+
 def _merge_conditions(all_conditions: List[dict]) -> List[dict]:
     """Deduplicate conditions by label, keeping the first occurrence."""
     seen = set()
@@ -676,12 +809,14 @@ def _resolve_cond_expr(
 def _normalize_cond_syntax(expr: str) -> str:
     """Fix common syntax issues in condition expressions.
 
+    - Bare ``condition.X`` refs -> ``(condition.X)``
     - ``!(...)`` -> ``not(...)``
     - Numeric equality/comparison ``(qLabel=N)`` or ``(qLabel==N)``
       -> ``(qLabel.check('N'))``
     - Numeric inequality ``(qLabel<N)`` or ``(qLabel>N)`` or ``<=``/``>=``
       -> ``(qLabel.check('<N'))`` etc.
     """
+    expr = re.sub(r"(?<!\()condition\.\w+", r"(\g<0>)", expr)
     expr = re.sub(r"!\(", "not(", expr)
 
     def _to_check(m: re.Match) -> str:
@@ -908,12 +1043,16 @@ def classify_segments(
     # Merge and deduplicate conditions
     all_conditions = _merge_conditions(all_conditions)
 
-    # Resolve any match=Value condition references to actual chN indices
+    # Convert select → radio when source has no [DROPDOWN] indicator
+    _guard_select_without_dropdown(all_questions, classifiable, all_conditions)
+
+    # Resolve any match=Value condition references to actual chN/rN indices
     _resolve_cond_references(all_conditions, all_questions)
 
     # Deterministic post-processing
     _guard_explicit_answers(all_questions, classifiable)
     _fix_agree_disagree_statements(all_questions, classifiable)
+    _recover_title_newlines(all_questions, classifiable)
     _format_statement_titles(all_questions)
     _ensure_comments(all_questions)
     _enforce_anchor_exclusive(all_questions)

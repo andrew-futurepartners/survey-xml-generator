@@ -22,6 +22,11 @@ SEGMENTATION_CHUNK_OVERLAP = 25
 # Temperature for AI calls (low = more deterministic)
 AI_TEMPERATURE = 0.1
 
+# When a select (dropdown) question has no [DROPDOWN] indicator in the
+# source and its explicit option count is at or below this threshold,
+# the classifier guard converts it to radio (single-select buttons).
+SELECT_TO_RADIO_MAX_OPTIONS = int(os.getenv("SELECT_TO_RADIO_MAX_OPTIONS", "10"))
+
 # --- Forsta XML defaults ---
 SURVEY_NAMESPACES = {
     "xmlns:builder": "http://decipherinc.com/builder",

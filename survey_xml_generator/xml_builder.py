@@ -155,7 +155,10 @@ def build_radio(q: Dict[str, Any]) -> str:
 
     # Rows (answers or matrix rows)
     answer_key = "matrix_rows" if q.get("is_matrix") else "answers"
-    for ans in q.get(answer_key, []):
+    answers_list = q.get(answer_key, [])
+    if answer_key == "answers" and answers_list:
+        answers_list = _apply_country_codes(answers_list)
+    for ans in answers_list:
         row_attrs = {}
         if ans.get("randomize") is not None:
             row_attrs["randomize"] = str(ans["randomize"])

@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
 import time
 from typing import Optional
 
 from openai import OpenAI
 
-from .config import OPENAI_API_KEY, OPENAI_MODEL, OPENAI_MODEL_MINI, AI_TEMPERATURE
+from .config import OPENAI_MODEL, OPENAI_MODEL_MINI, AI_TEMPERATURE
 
 logger = logging.getLogger(__name__)
 
@@ -19,17 +20,29 @@ _client_lock = threading.Lock()
 
 
 def get_client() -> OpenAI:
-    """Lazy-init and return the OpenAI client (thread-safe)."""
+    """Lazy-init and return the OpenAI client (thread-safe).
+
+    Reads OPENAI_API_KEY from os.environ at call time so that keys
+    set after import (e.g. via Streamlit sidebar or st.secrets) work.
+    """
     global _client
     if _client is None:
         with _client_lock:
             if _client is None:
-                if not OPENAI_API_KEY:
+                api_key = os.environ.get("OPENAI_API_KEY", "")
+                if not api_key:
                     raise ValueError(
-                        "OPENAI_API_KEY not set. Add it to your .env file."
+                        "OPENAI_API_KEY not set. Add it to .env or enter it in the sidebar."
                     )
-                _client = OpenAI(api_key=OPENAI_API_KEY)
+                _client = OpenAI(api_key=api_key)
     return _client
+
+
+def reset_client() -> None:
+    """Invalidate the cached client so the next call to get_client() rebuilds it."""
+    global _client
+    with _client_lock:
+        _client = None
 
 
 def call_ai(

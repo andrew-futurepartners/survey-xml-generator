@@ -5,18 +5,12 @@ AI-powered tool that converts survey questionnaire Word documents (.docx) into F
 ## Quick Start
 
 ```bash
-# 1. Install dependencies
 pip install -r requirements.txt
-
-# 2. Set up your API key
-cp .env.example .env
-# Edit .env and add your OpenAI API key
-
-# 3. Run the app
+cp .env.example .env        # add your OpenAI API key
 streamlit run app.py
 ```
 
-Then upload a .docx survey file and click "Generate XML."
+Then upload a .docx survey file and click "Generate XML." See [Running Locally](#running-locally) and [Deploy to Streamlit Cloud](#deploy-to-streamlit-cloud) below for full details.
 
 ## How It Works
 
@@ -147,6 +141,35 @@ Or from the command line:
 python -m survey_xml_generator.segmenter path/to/questionnaire.docx   # Stage 2 only
 python -m survey_xml_generator.classifier path/to/questionnaire.docx  # Stages 1-3
 ```
+
+## Deploy to Streamlit Cloud
+
+1. Push your repo to GitHub (ensure `.env` and `.streamlit/secrets.toml` are **not** committed).
+2. Go to [share.streamlit.io](https://share.streamlit.io) and connect your GitHub repo.
+3. Set the main file path to `app.py`.
+4. In the app's **Secrets** section (Settings → Secrets), add:
+   ```toml
+   OPENAI_API_KEY = "sk-your-key-here"
+   ```
+5. Deploy. The app will read the key from Streamlit secrets automatically.
+
+If you don't configure a secret, users will be prompted to enter their own OpenAI API key in the sidebar before they can generate XML.
+
+## Running Locally
+
+```bash
+# 1. Install dependencies
+pip install -r requirements.txt
+
+# 2. Set up your API key
+cp .env.example .env
+# Edit .env and add your OpenAI API key
+
+# 3. Run the app
+streamlit run app.py
+```
+
+Alternatively, you can create `.streamlit/secrets.toml` (from the provided `.streamlit/secrets.toml.example`) instead of using `.env` — either method works locally.
 
 ## Current Status
 

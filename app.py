@@ -17,8 +17,31 @@ _APP_DIR = Path(__file__).resolve().parent
 if str(_APP_DIR) not in sys.path:
     sys.path.insert(0, str(_APP_DIR))
 
-from survey_xml_generator.config import OPENAI_API_KEY, OPENAI_MODEL, OPENAI_MODEL_MINI
+from survey_xml_generator.config import OPENAI_MODEL, OPENAI_MODEL_MINI
+from survey_xml_generator.ai_client import reset_client
 from survey_xml_generator.assembler import process_bytes
+
+# ---------------------------------------------------------------------------
+# API key resolution: st.secrets -> .env -> user input
+# ---------------------------------------------------------------------------
+
+def _resolve_api_key() -> str:
+    """Return the active OpenAI API key from the best available source."""
+    # 1. Streamlit secrets (set in Cloud dashboard or .streamlit/secrets.toml)
+    try:
+        secret_key = st.secrets.get("OPENAI_API_KEY", "")
+        if secret_key:
+            os.environ["OPENAI_API_KEY"] = secret_key
+            return secret_key
+    except FileNotFoundError:
+        pass
+
+    # 2. Already in environment (loaded from .env by config.py or set by user)
+    env_key = os.environ.get("OPENAI_API_KEY", "")
+    if env_key:
+        return env_key
+
+    return ""
 
 # ---------------------------------------------------------------------------
 # Page config
@@ -41,13 +64,15 @@ with st.sidebar:
     st.divider()
 
     # API key status
-    if OPENAI_API_KEY:
-        st.success("OpenAI API key loaded from .env")
+    active_key = _resolve_api_key()
+    if active_key:
+        st.success("OpenAI API key active")
     else:
         st.error("No OpenAI API key found!")
         api_key_input = st.text_input("Enter OpenAI API Key:", type="password")
         if api_key_input:
             os.environ["OPENAI_API_KEY"] = api_key_input
+            reset_client()
             st.rerun()
 
     st.divider()
