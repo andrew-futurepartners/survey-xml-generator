@@ -6,7 +6,6 @@ and download clean Forsta XML.
 
 import streamlit as st
 import time
-import json
 import os
 from pathlib import Path
 
@@ -17,7 +16,7 @@ _APP_DIR = Path(__file__).resolve().parent
 if str(_APP_DIR) not in sys.path:
     sys.path.insert(0, str(_APP_DIR))
 
-from survey_xml_generator.config import OPENAI_MODEL, OPENAI_MODEL_MINI
+from survey_xml_generator.config import OPENAI_MODEL
 from survey_xml_generator.ai_client import reset_client
 from survey_xml_generator.assembler import process_bytes
 
@@ -48,7 +47,7 @@ def _resolve_api_key() -> str:
 # ---------------------------------------------------------------------------
 
 st.set_page_config(
-    page_title="Survey XML Generator",
+    page_title="Survey Programming Script",
     page_icon="📋",
     layout="wide",
 )
@@ -58,8 +57,8 @@ st.set_page_config(
 # ---------------------------------------------------------------------------
 
 with st.sidebar:
-    st.title("📋 Survey XML Generator")
-    st.caption("AI-powered .docx → Forsta XML")
+    st.title("📋 Survey Programming Script")
+    st.caption("AI-powered .docx to Forsta XML")
 
     st.divider()
 
@@ -77,29 +76,12 @@ with st.sidebar:
 
     st.divider()
 
-    # Model selection
-    model_choice = st.selectbox(
-        "AI Model",
-        options=[OPENAI_MODEL, OPENAI_MODEL_MINI],
-        index=0,
-        help="GPT-4o is more accurate. GPT-4o-mini is faster and cheaper.",
-    )
-
     # Survey name
     survey_name = st.text_input(
         "Survey Name",
         value="Survey",
         help="Used as the name attribute on the <survey> root element.",
     )
-
-    st.divider()
-
-    # Debug toggle
-    show_debug = st.checkbox("Show debug info", value=False)
-    show_intermediate = st.checkbox("Show intermediate stages", value=False)
-
-    st.divider()
-    st.caption(f"v2.0.0 | Model: {model_choice}")
 
 # ---------------------------------------------------------------------------
 # Main area
@@ -151,7 +133,7 @@ if uploaded_file is not None:
             xml_output, warnings, debug_info = process_bytes(
                 uploaded_file.getvalue(),
                 survey_name=survey_name,
-                model=model_choice,
+                model=OPENAI_MODEL,
                 progress_callback=progress_callback,
             )
 
@@ -170,9 +152,6 @@ if uploaded_file is not None:
             st.error(f"Configuration error: {e}")
         except Exception as e:
             st.error(f"Pipeline error: {e}")
-            if show_debug:
-                import traceback
-                st.code(traceback.format_exc(), language="python")
 
     # --- Display results from session state (persists across reruns) ---
     if "xml_output" in st.session_state:
@@ -195,13 +174,11 @@ if uploaded_file is not None:
         if q_count == 0 and seg_count == 0:
             st.error(
                 "No segments were extracted from the AI response. "
-                "This usually means the AI response structure was "
-                "unexpected. Enable 'Show debug info' for details."
+                "This usually means the AI response structure was unexpected."
             )
         elif q_count == 0:
             st.warning(
-                f"{seg_count} segments were found but 0 questions were "
-                "classified. Check segment block_types in debug info."
+                f"{seg_count} segments were found but 0 questions were classified."
             )
 
         if warnings:
@@ -238,16 +215,6 @@ if uploaded_file is not None:
                     height=42,
                 )
             st.code(xml_output, language="xml", line_numbers=True)
-
-        if show_debug:
-            with st.expander("Debug Info"):
-                st.json(debug_info)
-
-        if show_intermediate:
-            stage_messages = st.session_state.get("xml_stage_messages", [])
-            with st.expander("Processing Log"):
-                for msg in stage_messages:
-                    st.text(msg)
 
 else:
     # Show instructions when no file is uploaded
